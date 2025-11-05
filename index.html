@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Seminário de Crise Sanitária — Nova Alvorada do Sul</title>
+  <meta name="description" content="Apresentação interativa sobre vazamentos crônicos de esgoto no bairro Jaime Medeiros: impactos, plano emergencial e integração com GitHub." />
+  <meta name="author" content="Equipe de Saneamento / NASkebrada" />
+  <link rel="icon" href="data:,">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.9.2/html2pdf.bundle.min.js"></script>
+
+  <script>
+    // Tailwind custom palette
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            'risco': '#DC2626',
+            'alerta': '#FBBF24',
+            'asfalto-sujo': '#4B5563',
+            'fundo-limpo': '#F9FAFB',
+            'fundo-detalhe': '#FEF3C7',
+            'success-green': '#10B981'
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    /* Custom additions */
+    .chart-container { position: relative; width:100%; max-width:520px; margin:0 auto; height:320px; }
+    .card-impacto { cursor:pointer; transition:transform .22s ease, box-shadow .22s ease, border-color .22s ease; border-bottom:4px solid transparent; }
+    .card-impacto:focus { outline: 3px solid rgba(59,130,246,.25); outline-offset:2px; }
+    .card-impacto.ativo { transform: translateY(-6px); box-shadow: 0 12px 30px rgba(15,23,42,.12); border-bottom-color: #DC2626; }
+    .sewage-pulse { animation: pulse-sewage 2s infinite ease-out; }
+    @keyframes pulse-sewage {
+      0% { box-shadow: 0 0 0 0 rgba(220,38,38,.65); }
+      70% { box-shadow: 0 0 0 18px rgba(220,38,38,0); }
+      100% { box-shadow: 0 0 0 0 rgba(220,38,38,0); }
+    }
+    /* Print friendly */
+    @media print {
+      header, #controls-print-hide, #github_controls { display:none !important; }
+      body { background: #fff; color: #111; }
+      .chart-container { page-break-inside: avoid; }
+    }
+    /* Small helper */
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+  </style>
+</head>
+
+<body class="bg-fundo-limpo text-slate-800 leading-relaxed">
+  <a href="#main" class="sr-only focus:not-sr-only focus:block bg-blue-600 text-white p-2 m-2 rounded">Ir para o conteúdo</a>
+
+  <header class="bg-risco text-white py-10 shadow-lg">
+    <div class="max-w-7xl mx-auto px-6">
+      <h1 class="text-3xl md:text-4xl font-extrabold">Seminário de Alerta Cívico</h1>
+      <p class="mt-1 text-sm md:text-base italic opacity-95">Esgoto a Céu Aberto — Crise Sanitária em Nova Alvorada do Sul (Jaime Medeiros)</p>
+      <p class="mt-4 max-w-3xl text-sm md:text-base">Apresentação interativa para comunicar riscos, priorizar ações emergenciais (72h) e apoiar decisões da prefeitura e concessionária.</p>
+    </div>
+  </header>
+
+  <main id="main" class="max-w-7xl mx-auto p-6 md:p-10">
+    <!-- KPIs -->
+    <section aria-labelledby="fatos-title" class="mb-10">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h2 id="fatos-title" class="text-2xl font-bold text-asfalto-sujo">Fatos & Custos</h2>
+          <p class="text-sm text-gray-600">Resumo de impacto: saúde, ambiente e custos públicos.</p>
+        </div>
+
+        <div class="flex gap-4 items-center">
+          <div class="text-right">
+            <div class="text-4xl md:text-5xl font-extrabold text-risco" id="kpi_expostos">0%</div>
+            <div class="text-xs text-gray-500 uppercase">da população exposta</div>
+          </div>
+          <div class="text-right">
+            <div class="text-2xl md:text-3xl font-extrabold text-alerta" id="kpi_custo_saude">R$ 0</div>
+            <div class="text-xs text-gray-500 uppercase">custo anual (estimado)</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="bg-white p-6 rounded-lg shadow-md border-t-4 border-risco">
+          <h3 class="font-semibold text-asfalto-sujo">Exposição</h3>
+          <p class="mt-2 text-sm text-gray-600">Percentual estimado de residentes com esgoto próximo/recorrente.</p>
+        </div>
+
+        <div class="bg-white p-6 rounded-lg shadow-md border-t-4 border-alerta">
+          <h3 class="font-semibold text-asfalto-sujo">Custo da Saúde</h3>
+          <p class="mt-2 text-sm text-gray-600">Despesas públicas diretas com doenças de veiculação hídrica.</p>
+        </div>
+
+        <div class="bg-white p-4 rounded-lg shadow-md">
+          <div class="chart-container" role="img" aria-label="Gráfico de cobertura do saneamento e risco">
+            <canvas id="coberturaChart" width="400" height="320"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Ciclo da Crise -->
+    <section aria-labelledby="ciclo-title" class="mb-10">
+      <h2 id="ciclo-title" class="text-2xl font-bold text-asfalto-sujo mb-3">O Ciclo da Crise (Dias / Meses)</h2>
+      <p class="text-gray-600 mb-4">Clique ou navegue por teclado nos pilares para ver impacto, recomendação imediata e indicadores.</p>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6" role="tablist" aria-label="Pilares de impacto">
+        <button id="card_saude" role="tab" aria-selected="false" tabindex="0" class="card-impacto bg-white p-6 rounded-lg shadow-sm text-left">
+          <div class="flex items-center gap-4">
+            <span class="text-risco text-3xl" aria-hidden>😷</span>
+            <div>
+              <div class="text-sm font-semibold text-risco">SAÚDE PÚBLICA</div>
+              <div class="text-xs text-gray-500">Epidemias, triagem e custo clínico</div>
+            </div>
+          </div>
+        </button>
+
+        <button id="card_ambiente" role="tab" aria-selected="false" tabindex="0" class="card-impacto bg-white p-6 rounded-lg shadow-sm text-left">
+          <div class="flex items-center gap-4">
+            <span class="text-green-600 text-3xl" aria-hidden>🌿</span>
+            <div>
+              <div class="text-sm font-semibold text-green-600">MEIO AMBIENTE</div>
+              <div class="text-xs text-gray-500">Solo, água subterrânea, multas</div>
+            </div>
+          </div>
+        </button>
+
+        <button id="card_infraestrutura" role="tab" aria-selected="false" tabindex="0" class="card-impacto bg-white p-6 rounded-lg shadow-sm text-left">
+          <div class="flex items-center gap-4">
+            <span class="text-yellow-600 text-3xl" aria-hidden>🧱</span>
+            <div>
+              <div class="text-sm font-semibold text-yellow-600">INFRAESTRUTURA</div>
+              <div class="text-xs text-gray-500">Reparos, drenagem e orçamento</div>
+            </div>
+          </div>
+        </button>
+      </div>
+
+      <div id="detalhes_impacto" class="bg-fundo-detalhe p-6 rounded-lg shadow-inner border-l-4 border-alerta" aria-live="polite">
+        <h3 id="detalhe_titulo" class="text-xl font-bold text-asfalto-sujo">Carregando...</h3>
+        <p id="detalhe_texto" class="text-gray-700">Selecione um pilar para ver detalhes e recomendações.</p>
+      </div>
+    </section>
+
+    <!-- Valeta & Simulação -->
+    <section aria-labelledby="valeta-title" class="mb-10">
+      <h2 id="valeta-title" class="text-2xl font-bold text-asfalto-sujo mb-3">Valeta do Jaime Medeiros — Simulação de Chuva</h2>
+      <p class="text-gray-600 mb-4">Ajuste a intensidade da chuva para visualizar risco e dispersão.</p>
+
+      <div class="bg-white p-6 rounded-lg shadow-md grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+          <h4 class="font-bold text-asfalto-sujo mb-3">Fluxo de Contaminação</h4>
+          <div class="flex flex-col items-center space-y-4">
+            <div id="vazamento_origem" class="bg-risco text-white p-3 rounded-xl shadow-md sewage-pulse" aria-hidden>
+              <span class="font-semibold text-sm">1. Vazamento Crônico</span>
+            </div>
+            <div class="h-4 w-1 bg-gray-200"></div>
+            <div class="bg-asfalto-sujo text-white p-3 rounded-xl shadow-md" aria-hidden>
+              <span class="font-semibold text-sm">2. Acúmulo na Valeta</span>
+            </div>
+            <div class="w-full">
+              <label for="slider_chuva" id="label_chuva" class="block text-center font-bold mb-2">Intensidade da Chuva: Média</label>
+              <input id="slider_chuva" type="range" min="0" max="100" value="50" class="w-full" aria-labelledby="label_chuva">
+            </div>
+            <div id="contaminacao_saida" class="bg-alerta text-asfalto-sujo p-3 rounded-xl shadow-md transition-colors" aria-live="polite">
+              <span class="font-semibold text-sm">3. Risco: Moderado</span>
+            </div>
+            <div id="dispersao_final" class="text-risco p-2 rounded-xl border border-risco" aria-hidden>
+              <span class="font-semibold text-sm">4. Dispersão para áreas adjacentes</span>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h4 class="font-bold text-asfalto-sujo mb-3">Consequências</h4>
+          <ul class="list-disc pl-5 text-gray-700 space-y-2">
+            <li class="font-semibold text-risco">Contaminação de mananciais</li>
+            <li>Efeito diluição-dispersão que aumenta a área de exposição</li>
+            <li>Deterioração de vias e infraestrutura de drenagem</li>
+            <li>Ambiente propício para vetores (mosquitos, roedores)</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- Plano e Controles -->
+    <section id="acao_llm" aria-labelledby="acao-title" class="mb-10">
+      <h2 id="acao-title" class="text-2xl font-bold text-asfalto-sujo mb-3">Plano Emergencial (72h) — Geração Automática</h2>
+      <p class="text-gray-600 mb-4">Gere um plano em 3 passos acionáveis. Você pode usar uma chave da API Gemini (opcional) ou usar o gerador local offline.</p>
+
+      <div id="controls-print-hide" class="flex flex-col md:flex-row gap-3 items-start mb-4">
+        <div class="flex gap-2">
+          <button id="btn_gerar_plano" class="bg-risco hover:bg-red-700 text-white font-semibold py-2 px-4 rounded shadow">✨ Gerar Plano (72h)</button>
+          <button id="btn_copiar_plano" class="bg-asfalto-sujo hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded shadow" title="Copiar para área de transferência">Copiar</button>
+          <button id="btn_pdf_plano" class="bg-green-600 hover:bg-emerald-700 text-white font-semibold py-2 px-4 rounded shadow" title="Exportar para PDF">Exportar PDF</button>
+        </div>
+
+        <div class="flex items-center gap-2 ml-0 md:ml-6">
+          <label for="input_gemini_key" class="text-sm text-gray-600">Gemini API Key (opcional)</label>
+          <input id="input_gemini_key" type="password" placeholder="coloque sua chave aqui" class="p-2 border rounded text-sm" />
+        </div>
+      </div>
+
+      <div id="loading_plano" class="hidden text-sm text-asfalto-sujo font-medium mb-3">Gerando plano... ⏳</div>
+
+      <div id="plano_output" class="bg-white p-6 rounded-lg shadow-inner border-l-4 border-risco min-h-[120px]" aria-live="polite">
+        <p class="text-gray-600">Clique em "Gerar Plano (72h)" para obter os 3 passos críticos. Você pode copiar ou exportar o plano depois.</p>
+      </div>
+    </section>
+
+    <!-- GitHub integration -->
+    <section id="github_api" aria-labelledby="github_title" class="mb-10">
+      <h2 id="github_title" class="text-2xl font-bold text-asfalto-sujo mb-3">Integração com GitHub — Projetos Públicos</h2>
+      <p class="text-gray-600 mb-4">Procure repositórios públicos de um usuário. Opcional: forneça um token para aumentar limites ou acessar repositórios privados.</p>
+
+      <div id="github_controls" class="bg-white p-4 rounded-lg shadow-sm mb-4">
+        <div class="flex gap-3 items-center">
+          <input id="github_username" type="text" value="google" class="flex-1 p-2 border rounded" placeholder="Ex: octocat" aria-label="Nome de usuário GitHub">
+          <input id="github_token" type="password" placeholder="Token GitHub (opcional)" class="p-2 border rounded w-64" aria-label="Token GitHub">
+          <button id="btn_buscar_repos" class="bg-asfalto-sujo hover:bg-gray-700 text-white py-2 px-4 rounded">Buscar</button>
+          <button id="btn_export_csv" class="bg-green-600 hover:bg-emerald-700 text-white py-2 px-3 rounded" title="Exportar lista para CSV">CSV</button>
+        </div>
+      </div>
+
+      <div id="loading_repos" class="hidden text-sm text-asfalto-sujo font-medium mb-3">Buscando repositórios...</div>
+
+      <div id="repos_output" class="grid grid-cols-1 md:grid-cols-2 gap-4" aria-live="polite">
+        <p class="text-gray-500 italic">Nenhuma busca realizada ainda.</p>
+      </div>
+    </section>
+
+    <footer class="mt-12 text-sm text-gray-500">
+      <p>Desenvolvido para comunicação pública e ação emergencial. Melhorias: autenticação GitHub via OAuth, mapas de calor por geolocalização e integração com sistemas municipais.</p>
+    </footer>
+  </main>
+
+  <script>
+    // -------------------------
+    // Global data and helpers
+    // -------------------------
+    const defaultData = {
+      cobertura: 60,
+      vazamentos_cronicos: 40,
+      kpi_expostos: 38,
+      kpi_custo_saude: 450000
+    };
+
+    // Format currency BRL
+    function formatBRL(n) {
+      return new Intl.NumberFormat('pt-BR', { style:'currency', currency:'BRL', maximumFractionDigits:0 }).format(n);
+    }
+
+    // Simple animate counter
+    function animateCount(el, from, to, duration = 1000, suffix = '') {
+      const start = performance.now();
+      requestAnimationFrame(function tick(now) {
+        const t = Math.min(1, (now - start) / duration);
+        const v = Math.round(from + (to - from) * t);
+        el.textContent = v + suffix;
+        if (t < 1) requestAnimationFrame(tick);
+      });
+    }
+
+    // -------------------------
+    // Chart.js doughnut
+    // -------------------------
+    const ctx = document.getElementById('coberturaChart').getContext('2d');
+    const coberturaChart = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Saneamento Existente', 'Vazamentos/Risco'],
+        datasets: [{
+          data: [defaultData.cobertura, defaultData.vazamentos_cronicos],
+          backgroundColor: ['#10B981', '#DC2626'],
+          hoverOffset: 6
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { position: 'bottom' },
+          tooltip: { callbacks: { label: ctx => `${ctx.label}: ${ctx.parsed}%` } }
+        }
+      }
+    });
+
+    // Set KPI numbers with animation
+    document.addEventListener('DOMContentLoaded', () => {
+      const kpiExpostosEl = document.getElementById('kpi_expostos');
+      const kpiCustoEl = document.getElementById('kpi_custo_saude');
+      animateCount(kpiExpostosEl, 0, defaultData.kpi_expostos, 900, '%');
+      animateCount(kpiCustoEl, 0, defaultData.kpi_custo_saude, 1200);
+      // show formatted cost
+      setTimeout(() => { kpiCustoEl.textContent = formatBRL(defaultData.kpi_custo_saude); }, 1250);
+    });
+
+    // -------------------------
+    // Impact cards & details
+    // -------------------------
+    const impacto_detalhes = {
+      saude: {
+        titulo: "SAÚDE PÚBLICA: Epidemias Silenciosas",
+        texto: "O esgoto a céu aberto é vetor de Hepatite A, Leptospirose, diarreias e infecções cutâneas. Vazamentos crônicos aumentam risco em crianças, idosos e profissionais expostos. Recomendações imediatas: triagem, kits de higiene e desinfecção de pontos de contato."
+      },
+      ambiente: {
+        titulo: "MEIO AMBIENTE: Contaminação Crônica",
+        texto: "Descarga contínua contamina solo e lençóis freáticos, comprometendo poços e ecossistemas urbanos. Medidas: monitoramento de poços, amostragem laboratorial e sinalização ecológica."
+      },
+      infraestrutura: {
+        titulo: "INFRAESTRUTURA: Despesa & Degeneração",
+        texto: "Soluções temporárias são necessárias para estabilizar a via e evitar erosão. Plano administrativo deve priorizar reparos e reavaliação de contrato com concessionária."
+      }
+    };
+
+    const cardSaude = document.getElementById('card_saude');
+    const cardAmbiente = document.getElementById('card_ambiente');
+    const cardInfra = document.getElementById('card_infraestrutura');
+    const detalheTitulo = document.getElementById('detalhe_titulo');
+    const detalheTexto = document.getElementById('detalhe_texto');
+
+    function alternarDetalhes(pilar) {
+      [cardSaude, cardAmbiente, cardInfra].forEach(c => {
+        c.classList.remove('ativo');
+        c.setAttribute('aria-selected', 'false');
+      });
+      const el = document.getElementById('card_' + pilar);
+      if (el) {
+        el.classList.add('ativo');
+        el.setAttribute('aria-selected', 'true');
+        detalheTitulo.textContent = impacto_detalhes[pilar].titulo;
+        detalheTexto.textContent = impacto_detalhes[pilar].texto;
+        detalheTitulo.focus?.();
+      }
+    }
+
+    cardSaude.addEventListener('click', () => alternarDetalhes('saude'));
+    cardAmbiente.addEventListener('click', () => alternarDetalhes('ambiente'));
+    cardInfra.addEventListener('click', () => alternarDetalhes('infraestrutura'));
+
+    // Keyboard navigation for cards
+    [cardSaude, cardAmbiente, cardInfra].forEach((c, idx, arr) => {
+      c.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); arr[(idx+1)%arr.length].focus(); }
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); arr[(idx-1+arr.length)%arr.length].focus(); }
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); c.click(); }
+      });
+    });
+
+    // Set default
+    alternarDetalhes('saude');
+
+    // -------------------------
+    // Slider chuva
+    // -------------------------
+    const sliderChuva = document.getElementById('slider_chuva');
+    const labelChuva = document.getElementById('label_chuva');
+    const contaminacaoSaida = document.getElementById('contaminacao_saida');
+    const vazamentoOrigem = document.getElementById('vazamento_origem');
+    const dispersaoFinal = document.getElementById('dispersao_final');
+
+    function atualizarEstadoChuva(valor) {
+      const nivel = Number(valor);
+      labelChuva.textContent = `Intensidade da Chuva: ${nivel < 33 ? 'Baixa' : nivel < 66 ? 'Média' : 'Alta'}`;
+      contaminacaoSaida.classList.remove('bg-safe','bg-moderate','bg-danger','text-white');
+      dispersaoFinal.classList.remove('text-risco','border-risco');
+      vazamentoOrigem.classList.remove('sewage-pulse');
+
+      if (nivel < 33) {
+        contaminacaoSaida.classList.add('bg-success-green');
+        contaminacaoSaida.innerHTML = '<span class="font-semibold text-sm">3. Risco Baixo: Contaminação Localizada</span>';
+      } else if (nivel < 66) {
+        contaminacaoSaida.classList.add('bg-fundo-detalhe');
+        contaminacaoSaida.innerHTML = '<span class="font-semibold text-sm">3. Risco Moderado: Dispersão Ampliada</span>';
+        vazamentoOrigem.classList.add('sewage-pulse');
+      } else {
+        contaminacaoSaida.classList.add('bg-risco','text-white');
+        contaminacaoSaida.innerHTML = '<span class="font-semibold text-sm">3. ALTO RISCO: Contaminação Extensa</span>';
+        vazamentoOrigem.classList.add('sewage-pulse');
+        dispersaoFinal.classList.add('text-risco','border-risco');
+      }
+    }
+    sliderChuva.addEventListener('input', e => atualizarEstadoChuva(e.target.value));
+    // initial
+    atualizarEstadoChuva(sliderChuva.value);
+
+    // -------------------------
+    // Plano emergencial (Gemini fallback)
+    // -------------------------
+    const btnGerarPlano = document.getElementById('btn_gerar_plano');
+    const planoOutput = document.
